@@ -5,13 +5,14 @@ import { StoreController } from './store.controller';
 import { Store } from './entities/store.entity';
 import { Order } from '../analytics/entities/order.entity';
 import { Product } from '../analytics/entities/product.entity';
+import { SessionMetric } from '../analytics/entities/session-metric.entity';
 import { ShopifyModule } from '../shopify/shopify.module';
 
 import { LineItem } from '../analytics/entities/line-item.entity';
 
 @Module({
     imports: [
-        TypeOrmModule.forFeature([Store, Order, Product, LineItem]),
+        TypeOrmModule.forFeature([Store, Order, Product, LineItem, SessionMetric]),
         ShopifyModule,
     ],
     controllers: [StoreController],

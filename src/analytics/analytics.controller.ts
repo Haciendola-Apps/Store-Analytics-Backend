@@ -13,4 +13,13 @@ export class AnalyticsController {
     ) {
         return this.analyticsService.getStoreAnalytics(storeId, startDate, endDate);
     }
+
+    @Get(':storeId/sessions')
+    getSessionMetrics(
+        @Param('storeId') storeId: string,
+        @Query('startDate') startDate?: string,
+        @Query('endDate') endDate?: string,
+    ) {
+        return this.analyticsService.getSessionMetrics(storeId, startDate, endDate);
+    }
 }

@@ -4,11 +4,12 @@ import { AnalyticsController } from './analytics.controller';
 import { AnalyticsService } from './analytics.service';
 import { Order } from './entities/order.entity';
 import { Product } from './entities/product.entity';
+import { SessionMetric } from './entities/session-metric.entity';
 
 import { LineItem } from './entities/line-item.entity';
 
 @Module({
-    imports: [TypeOrmModule.forFeature([Order, Product, LineItem])],
+    imports: [TypeOrmModule.forFeature([Order, Product, LineItem, SessionMetric])],
     controllers: [AnalyticsController],
     providers: [AnalyticsService],
     exports: [AnalyticsService]

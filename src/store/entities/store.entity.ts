@@ -2,6 +2,7 @@ import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, OneToMany } f
 import { Order } from '../../analytics/entities/order.entity';
 import { Product } from '../../analytics/entities/product.entity';
 import { DailyMetric } from '../../analytics/entities/daily-metric.entity';
+import { SessionMetric } from '../../analytics/entities/session-metric.entity';
 
 @Entity()
 export class Store {
@@ -44,4 +45,10 @@ export class Store {
 
     @OneToMany(() => DailyMetric, (metric) => metric.store)
     dailyMetrics: DailyMetric[];
+
+    @OneToMany(() => SessionMetric, (metric) => metric.store)
+    sessionMetrics: SessionMetric[];
+
+    @Column('text', { array: true, default: '{}' })
+    tags: string[];
 }

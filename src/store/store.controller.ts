@@ -6,8 +6,8 @@ export class StoreController {
     constructor(private readonly storeService: StoreService) { }
 
     @Post()
-    create(@Body() body: { url: string; accessToken: string; name: string }) {
-        return this.storeService.create(body.url, body.accessToken, body.name);
+    create(@Body() body: { url: string; accessToken: string; name: string; tags?: string[] }) {
+        return this.storeService.create(body.url, body.accessToken, body.name, body.tags);
     }
 
     @Get()
@@ -22,9 +22,13 @@ export class StoreController {
 
     @Post(':id/sync')
     async sync(@Param('id') id: string) {
-        const store = await this.storeService.findOne(id);
-        this.storeService.syncStoreData(store); // Async
-        return { message: 'Sync started' };
+        try {
+            const store = await this.storeService.findOne(id);
+            await this.storeService.syncStoreData(store);
+            return { success: true, message: 'Sync completed successfully' };
+        } catch (error: any) {
+            return { success: false, message: error.message || 'Sync failed' };
+        }
     }
 
     @Delete(':id')
@@ -33,7 +37,7 @@ export class StoreController {
     }
 
     @Patch(':id')
-    update(@Param('id') id: string, @Body() body: { name?: string; accessToken?: string; startDate?: Date; endDate?: Date }) {
+    update(@Param('id') id: string, @Body() body: { name?: string; accessToken?: string; startDate?: Date; endDate?: Date; tags?: string[] }) {
         return this.storeService.update(id, body);
     }
 }

@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Order } from './entities/order.entity';
 import { Product } from './entities/product.entity';
 import { LineItem } from './entities/line-item.entity';
+import { SessionMetric } from './entities/session-metric.entity';
 
 @Injectable()
 export class AnalyticsService {
@@ -12,6 +13,8 @@ export class AnalyticsService {
         private orderRepository: Repository<Order>,
         @InjectRepository(Product)
         private productRepository: Repository<Product>,
+        @InjectRepository(SessionMetric)
+        private sessionMetricRepository: Repository<SessionMetric>,
     ) { }
 
     async getStoreAnalytics(storeId: string, startDate?: string, endDate?: string) {
@@ -164,6 +167,30 @@ export class AnalyticsService {
                 id: p.title,
                 title: p.title,
                 totalSales: parseFloat(p.totalSales)
+            }))
+        };
+    }
+
+    async getSessionMetrics(storeId: string, startDate?: string, endDate?: string) {
+        let query = this.sessionMetricRepository
+            .createQueryBuilder('metric')
+            .where('metric.storeId = :storeId', { storeId })
+            .orderBy('metric.date', 'ASC');
+
+        if (startDate && endDate) {
+            query = query.andWhere('metric.date BETWEEN :startDate AND :endDate', {
+                startDate,
+                endDate
+            });
+        }
+
+        const metrics = await query.getMany();
+
+        return {
+            sessions: metrics.map(m => ({
+                date: m.date,
+                sessions: m.sessions,
+                conversionRate: m.conversionRate ? parseFloat(m.conversionRate.toString()) : null
             }))
         };
     }
