@@ -103,7 +103,9 @@ export class AnalyticsService {
             const orders = parseInt(metrics.totalOrders || '0');
             const aov = orders > 0 ? revenue / orders : 0;
             const sessions = parseInt(metrics.totalSessions || '0');
-            const cr = parseFloat(metrics.avgCR || '0');
+            // Use AVG of daily conversion rates to match Shopify's calculation
+            // Shopify returns conversion_rate as decimal (0.007732 = 0.77%), so multiply by 100
+            const cr = parseFloat(metrics.avgCR || '0') * 100;
 
             return { revenue, orders, aov, sessions, cr };
         };
@@ -213,7 +215,7 @@ export class AnalyticsService {
             totalOrders: currentMetrics.orders,
             averageOrderValue: parseFloat(currentMetrics.aov.toFixed(2)),
             totalSessions: currentMetrics.sessions,
-            conversionRate: parseFloat((currentMetrics.cr * 100).toFixed(2)),
+            conversionRate: parseFloat(currentMetrics.cr.toFixed(2)),
             comparison: comparisonMetrics ? {
                 totalRevenueChange: calculateChange(currentMetrics.revenue, comparisonMetrics.revenue),
                 totalOrdersChange: calculateChange(currentMetrics.orders, comparisonMetrics.orders),
