@@ -22,41 +22,7 @@ export class ShopifyService {
         return url.startsWith('http') ? url : `https://${url}`;
     }
 
-    private async executeGraphQL(storeUrl: string, accessToken: string, query: string): Promise<any> {
-        const baseUrl = this.formatStoreUrl(storeUrl);
-        // Use 2026-01 version to match REST API and ensure compatibility
-        const url = `${baseUrl}/admin/api/2026-01/graphql.json`;
 
-        try {
-            const { data } = await firstValueFrom(
-                this.httpService.post(url, { query }, {
-                    headers: {
-                        'X-Shopify-Access-Token': accessToken,
-                        'Content-Type': 'application/json; charset=utf-8',
-                        'Accept': 'application/json',
-                    },
-                }),
-            );
-
-            if (data.errors) {
-                // Check if it's a "Field doesn't exist" error (ShopifyQL not supported)
-                const isUndefinedField = data.errors.some((e: any) => e.extensions?.code === 'undefinedField');
-
-                if (isUndefinedField) {
-                    this.logger.warn(`ShopifyQL not supported by this store/API version: ${JSON.stringify(data.errors[0].message)}`);
-                    return { shopifyqlQuery: { tableData: { rows: [] } } }; // Return empty structure
-                }
-
-                this.logger.error('GraphQL errors:', JSON.stringify(data.errors));
-                throw new Error(`GraphQL Error: ${JSON.stringify(data.errors)}`);
-            }
-
-            return data.data;
-        } catch (error) {
-            this.logger.error(`Failed to execute GraphQL query on ${baseUrl}`, error.response?.data || error.message);
-            throw new Error(`Shopify GraphQL Error: ${error.message}`);
-        }
-    }
 
     async getDailyAnalytics(storeUrl: string, accessToken: string, since: string, until: string) {
         // ShopifyQL query
@@ -79,33 +45,33 @@ export class ShopifyService {
             }
         `;
 
-        this.logger.log(`ShopifyQL Query: ${shopifyQLQuery}`);
+        this.logger.log(`[${storeUrl}] ShopifyQL Query: ${shopifyQLQuery}`);
 
         try {
-            const result = await this.executeGraphQL(storeUrl, accessToken, query);
+            //lets do the fetch right here witouth dependint on other methods
 
-            if (result.shopifyqlQuery?.parseErrors && result.shopifyqlQuery.parseErrors.length > 0) {
-                const errors = result.shopifyqlQuery.parseErrors;
-                this.logger.error('ShopifyQL parse errors:', JSON.stringify(errors));
-                const errorDetail = typeof errors[0] === 'string' ? errors[0] : (errors[0].message || JSON.stringify(errors[0]));
-                throw new Error(`ShopifyQL Error: ${errorDetail}`);
+            const response = await fetch(`https://${storeUrl}/admin/api/2026-01/graphql.json`, {
+                method: 'POST',
+                headers: {
+                    'X-Shopify-Access-Token': accessToken,
+                    'Content-Type': 'application/json; charset=utf-8',
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify({ query }),
+            });
+
+            const data = await response.json();
+            if (data.errors) {
+                throw new Error(data.errors[0].message);
             }
 
-            const tableData = result.shopifyqlQuery?.tableData;
+            const tableData = data.data.shopifyqlQuery.tableData;
             if (!tableData || !tableData.rows) {
-                this.logger.warn('No analytics data returned from ShopifyQL');
+                this.logger.warn(`[${storeUrl}] No analytics data returned from ShopifyQL`);
                 return [];
             }
 
-            this.logger.log(`Fetched ${tableData.rows.length} rows from ShopifyQL`);
-
-            // Parse the rows
-            // Expected columns from query: total_sales, orders, average_order_value, conversion_rate, sessions, day
-            // Note: "day" is usually the grouping key, so it might be first or last depending on ShopifyQL implementation details.
-            // Usually GROUP BY columns appear first in result rows, OR the order matches SHOW + GROUP BY.
-            // Let's verify column order or map by index dynamically if possible, but for now we assume the order returned matches SHOW unless GROUP BY key is implicit.
-            // Actually, ShopifyQL returns GROUP BY keys first.
-            // So: day, total_sales, orders, average_order_value, conversion_rate, sessions
+            this.logger.log(`[${storeUrl}] Fetched ${tableData.rows.length} rows from ShopifyQL`);
 
             return tableData.rows.map((row: any) => {
                 const isArray = Array.isArray(row);
@@ -120,7 +86,7 @@ export class ShopifyService {
             });
 
         } catch (error) {
-            this.logger.error(`Failed to fetch daily analytics`, error.message);
+            this.logger.error(`[${storeUrl}] Failed to fetch daily analytics`, error.message);
             throw error;
         }
     }
@@ -146,25 +112,31 @@ export class ShopifyService {
             }
         `;
 
-        this.logger.log(`ShopifyQL Product Query: ${shopifyQLQuery}`);
+        this.logger.log(`[${storeUrl}] ShopifyQL Product Query: ${shopifyQLQuery}`);
 
         try {
-            const result = await this.executeGraphQL(storeUrl, accessToken, query);
+            const response = await fetch(`https://${storeUrl}/admin/api/2026-01/graphql.json`, {
+                method: 'POST',
+                headers: {
+                    'X-Shopify-Access-Token': accessToken,
+                    'Content-Type': 'application/json; charset=utf-8',
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify({ query }),
+            });
 
-            if (result.shopifyqlQuery?.parseErrors && result.shopifyqlQuery.parseErrors.length > 0) {
-                const errors = result.shopifyqlQuery.parseErrors;
-                this.logger.error('ShopifyQL parse errors:', JSON.stringify(errors));
-                const errorDetail = typeof errors[0] === 'string' ? errors[0] : (errors[0].message || JSON.stringify(errors[0]));
-                throw new Error(`ShopifyQL Error: ${errorDetail}`);
+            const data = await response.json();
+            if (data.errors) {
+                throw new Error(data.errors[0].message);
             }
 
-            const tableData = result.shopifyqlQuery?.tableData;
+            const tableData = data.data.shopifyqlQuery.tableData;
             if (!tableData || !tableData.rows) {
-                this.logger.warn('No product analytics data returned from ShopifyQL');
+                this.logger.warn(`[${storeUrl}] No product analytics data returned from ShopifyQL`);
                 return [];
             }
 
-            this.logger.log(`Fetched ${tableData.rows.length} product rows from ShopifyQL`);
+            this.logger.log(`[${storeUrl}] Fetched ${tableData.rows.length} product rows from ShopifyQL`);
 
             // Parse rows. Expected order:
             // day, product_title, product_id, total_sales, net_sales, net_items_sold
@@ -182,50 +154,8 @@ export class ShopifyService {
             });
 
         } catch (error) {
-            this.logger.error(`Failed to fetch product analytics`, error.message);
+            this.logger.error(`[${storeUrl}] Failed to fetch product analytics`, error.message);
             throw error;
-        }
-    }
-
-    async getOrders(storeUrl: string, accessToken: string) {
-        const baseUrl = this.formatStoreUrl(storeUrl);
-        const url = `${baseUrl}/admin/api/2026-01/orders.json?status=any&limit=250`;
-
-        try {
-            const { data } = await firstValueFrom(
-                this.httpService.get(url, {
-                    headers: {
-                        'X-Shopify-Access-Token': accessToken,
-                        'Content-Type': 'application/json; charset=utf-8',
-                        'Accept': 'application/json',
-                    },
-                }),
-            );
-            return data.orders;
-        } catch (error) {
-            this.logger.error(`Failed to fetch orders from ${baseUrl}`, error.response?.data || error.message);
-            throw new Error(`Shopify API Error: ${error.message}`);
-        }
-    }
-
-    async getProducts(storeUrl: string, accessToken: string) {
-        const baseUrl = this.formatStoreUrl(storeUrl);
-        const url = `${baseUrl}/admin/api/2026-01/products.json?limit=250`;
-
-        try {
-            const { data } = await firstValueFrom(
-                this.httpService.get(url, {
-                    headers: {
-                        'X-Shopify-Access-Token': accessToken,
-                        'Content-Type': 'application/json; charset=utf-8',
-                        'Accept': 'application/json',
-                    },
-                }),
-            );
-            return data.products;
-        } catch (error) {
-            this.logger.error(`Failed to fetch products from ${baseUrl}`, error.response?.data || error.message);
-            throw new Error(`Shopify API Error: ${error.message}`);
         }
     }
 }

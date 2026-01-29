@@ -38,7 +38,7 @@ export class StoreService {
 
             // Trigger sync for existing store to allow retries
             this.syncStoreData(existing).catch(err =>
-                this.logger.error(`Re-sync failed for store ${url}`, err.stack)
+                this.logger.error(`[${url}] Re-sync failed for store ${url}`, err.stack)
             );
             return existing;
         }
@@ -54,7 +54,7 @@ export class StoreService {
 
         // Trigger initial sync asynchronously
         this.syncStoreData(savedStore).catch(err =>
-            this.logger.error(`Initial sync failed for store ${url}`, err.stack)
+            this.logger.error(`[${url}] Initial sync failed for store ${url}`, err.stack)
         );
 
         return savedStore;
@@ -82,7 +82,7 @@ export class StoreService {
     }
 
     async syncStoreData(store: Store) {
-        this.logger.log(`Starting sync for store: ${store.name}`);
+        this.logger.log(`[${store.url}] Syncing store: ${store.name}`);
 
         // Update status to SYNCING
         await this.storeRepository.update(store.id, { syncStatus: 'SYNCING' });
@@ -102,7 +102,7 @@ export class StoreService {
             if (lastMetric && (lastMetric as any).date) {
                 // SOFT SYNC: Start from last metric date
                 sinceStr = (lastMetric as any).date;
-                this.logger.log(`Soft Sync detected. Syncing from ${sinceStr} to ${todayStr}`);
+                this.logger.log(`[${store.url}] Soft Sync detected. Syncing from ${sinceStr} to ${todayStr}`);
             } else {
                 // HARD SYNC: Reference Period Start - 3 Months
                 let anchorDate = store.startDate ? new Date(store.startDate) : new Date();
@@ -117,40 +117,10 @@ export class StoreService {
                 sinceDate.setMonth(sinceDate.getMonth() - 3);
 
                 sinceStr = sinceDate.toISOString().split('T')[0];
-                this.logger.log(`Hard/Initial Sync detected. Syncing from ${sinceStr} (Ref Start - 3m) to ${todayStr}`);
+                this.logger.log(`[${store.url}] Hard/Initial Sync detected. Syncing from ${sinceStr} (Ref Start - 3m) to ${todayStr}`);
             }
-
-            // 2. Sync Standard Products (Metadata)
-            this.logger.log(`Starting standard product sync for store: ${store.name}`);
-            try {
-                const products = await this.shopifyService.getProducts(store.url, store.accessToken);
-                for (const p of products) {
-                    let product = await this.productRepository.findOne({
-                        where: { shopifyId: p.id.toString(), store: { id: store.id } }
-                    });
-
-                    if (!product) {
-                        product = this.productRepository.create({
-                            shopifyId: p.id.toString(),
-                            store: store
-                        });
-                    }
-
-                    product.title = p.title;
-                    product.handle = p.handle;
-                    product.image = p.image?.src || null;
-                    product.status = p.status;
-                    product.tags = p.tags ? p.tags.split(',').map((t: string) => t.trim()) : [];
-
-                    await this.productRepository.save(product);
-                }
-                this.logger.log(`Synced ${products.length} products for ${store.name}`);
-            } catch (err) {
-                this.logger.warn(`Failed to sync standard products: ${err.message}`);
-            }
-
-            // 3. Sync Product Metrics (Top Products) - ShopifyQL Logic
-            this.logger.log(`Starting product metrics sync for store: ${store.name}`);
+            // 2. Sync Product Metrics (Top Products) - ShopifyQL Logic
+            this.logger.log(`[${store.url}] Starting product metrics sync for store: ${store.name}`);
             try {
                 // Use same time range as daily metrics
                 const productAnalytics = await this.shopifyService.getProductAnalytics(
@@ -160,7 +130,7 @@ export class StoreService {
                     todayStr
                 );
 
-                this.logger.log(`Fetched ${productAnalytics.length} product metric records`);
+                this.logger.log(`[${store.url}] Fetched ${productAnalytics.length} product metric records`);
 
                 const productMetricRepo = this.storeRepository.manager.getRepository('ProductMetric');
 
@@ -168,6 +138,12 @@ export class StoreService {
                 // Note: Ideally we would use a unique constraint on [store, date, productTitle].
 
                 for (const pData of productAnalytics) {
+                    // Skip records with null productTitle as they violate NOT NULL constraint
+                    if (!pData.productTitle) {
+                        this.logger.warn(`[${store.url}] Skipping product metric with null productTitle for date ${pData.date}`);
+                        continue;
+                    }
+
                     let pMetric = await productMetricRepo.findOne({
                         where: {
                             store: { id: store.id },
@@ -179,32 +155,30 @@ export class StoreService {
                     }) as any;
 
                     if (!pMetric) {
+                        this.logger.log(`[${store.url}] creating new product metric: date: ${pData.date}, productTitle: ${pData.productTitle}, productId: ${pData.productId}`);
                         pMetric = productMetricRepo.create({
-                            store: store,
                             date: pData.date,
                             productTitle: pData.productTitle,
-                            productId: pData.productId
+                            productId: pData.productId,
+                            totalSales: pData.totalSales,
+                            netSales: pData.netSales,
+                            netItemsSold: pData.netItemsSold,
+                            store: store,
                         });
+                        await productMetricRepo.save(pMetric);
+                    } else {
+                        this.logger.log(`[${store.url}] skipping existing product metric: date: ${pData.date}, productTitle: ${pData.productTitle}, productId: ${pData.productId}`);
                     }
-
-                    pMetric.totalSales = pData.totalSales;
-                    pMetric.netSales = pData.netSales;
-                    pMetric.netItemsSold = pData.netItemsSold;
-                    pMetric.productId = pData.productId;
-
-                    await productMetricRepo.save(pMetric);
                 }
-                this.logger.log(`Successfully synced product metrics`);
+                this.logger.log(`[${store.url}] Successfully synced product metrics`);
 
             } catch (err) {
-                this.logger.warn(`Failed to sync product metrics: ${err.message}`);
+                this.logger.warn(`[${store.url}] Failed to sync product metrics: ${err.message}`);
                 // We don't want to fail the whole sync if product metrics fail, just log it.
             }
 
             // 3. Sync Daily Metrics (New Architecture)
-            this.logger.log(`Starting daily metrics sync for store: ${store.name}`);
-
-
+            this.logger.log(`[${store.url}] Starting daily metrics sync for store: ${store.name}`);
 
             try {
                 const analyticsData = await this.shopifyService.getDailyAnalytics(
@@ -214,7 +188,7 @@ export class StoreService {
                     todayStr
                 );
 
-                this.logger.log(`Fetched ${analyticsData.length} daily records from Shopify`);
+                this.logger.log(`[${store.url}] Fetched ${analyticsData.length} daily records from Shopify`);
 
                 // Insert/Update metrics
                 const dailyMetricRepo = this.storeRepository.manager.getRepository('DailyMetric');
@@ -246,10 +220,10 @@ export class StoreService {
                     await dailyMetricRepo.save(metric);
                 }
 
-                this.logger.log(`Successfully synced daily metrics`);
+                this.logger.log(`[${store.url}] Successfully synced daily metrics`);
 
             } catch (error) {
-                this.logger.error(`Failed to sync daily metrics for store ${store.name}`, error.message);
+                this.logger.error(`[${store.url}] Failed to sync daily metrics for store ${store.name}`, error.message);
                 throw error;
             }
 
@@ -258,10 +232,10 @@ export class StoreService {
                 syncStatus: 'COMPLETED',
                 lastSyncAt: new Date()
             });
-            this.logger.log(`Sync completed for store: ${store.name}`);
+            this.logger.log(`[${store.url}] Sync completed for store: ${store.name}`);
 
         } catch (error: any) {
-            this.logger.error(`Sync failed for store ${store.name}`, error.stack);
+            this.logger.error(`[${store.url}] Sync failed for store ${store.name}`, error.stack);
             await this.storeRepository.update(store.id, { syncStatus: 'FAILED' });
             throw error;
         }
