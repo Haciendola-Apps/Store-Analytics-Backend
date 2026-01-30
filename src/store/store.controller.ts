@@ -17,9 +17,11 @@ export class StoreController {
         @Query('tags') tags?: string,
         @Query('status') status?: string,
         @Query('startDate') startDate?: string,
-        @Query('endDate') endDate?: string
+        @Query('endDate') endDate?: string,
+        @Query('themeName') themeName?: string,
+        @Query('themeVersion') themeVersion?: string
     ) {
-        return this.storeService.findAll({ name, url, tags, status, startDate, endDate });
+        return this.storeService.findAll({ name, url, tags, status, startDate, endDate, themeName, themeVersion });
     }
 
     @Get(':id')

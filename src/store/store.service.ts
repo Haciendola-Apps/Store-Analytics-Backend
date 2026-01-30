@@ -66,7 +66,7 @@ export class StoreService {
         return savedStore;
     }
 
-    async findAll(filters?: { name?: string; url?: string; tags?: string; status?: string; startDate?: string; endDate?: string }) {
+    async findAll(filters?: { name?: string; url?: string; tags?: string; status?: string; startDate?: string; endDate?: string; themeName?: string; themeVersion?: string }) {
         this.logger.log(`Fetching stores with filters: ${JSON.stringify(filters || {})}`);
 
         // If no filters are provided, return all stores
@@ -82,6 +82,14 @@ export class StoreService {
 
         if (filters.url) {
             query.andWhere('store.url ILIKE :url', { url: `%${filters.url}%` });
+        }
+
+        if (filters.themeName) {
+            query.andWhere('store.themeName ILIKE :themeName', { themeName: `%${filters.themeName}%` });
+        }
+
+        if (filters.themeVersion) {
+            query.andWhere('store.themeVersion ILIKE :themeVersion', { themeVersion: `%${filters.themeVersion}%` });
         }
 
         if (filters.status) {
