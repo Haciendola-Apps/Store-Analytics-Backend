@@ -24,7 +24,7 @@ export class StoreService {
         private shopifyService: ShopifyService,
     ) { }
 
-    async create(url: string, accessToken: string, name: string, tags: string[] = [], startDate?: string, endDate?: string) {
+    async create(url: string, accessToken?: string, name?: string, tags: string[] = [], startDate?: string, endDate?: string) {
         const existing = await this.storeRepository.findOne({ where: { url } });
         if (existing) {
             // Update tags if provided
@@ -33,29 +33,35 @@ export class StoreService {
             }
             if (startDate) existing.startDate = new Date(startDate);
             if (endDate) existing.endDate = new Date(endDate);
+            if (accessToken) existing.accessToken = accessToken;
+            if (name) existing.name = name;
 
             await this.storeRepository.save(existing);
 
-            // Trigger sync for existing store to allow retries
-            this.syncStoreData(existing).catch(err =>
-                this.logger.error(`[${url}] Re-sync failed for store ${url}`, err.stack)
-            );
+            // Trigger sync for existing store to allow retries if token exists
+            if (existing.accessToken) {
+                this.syncStoreData(existing).catch(err =>
+                    this.logger.error(`[${url}] Re-sync failed for store ${url}`, err.stack)
+                );
+            }
             return existing;
         }
         const store = this.storeRepository.create({
             url,
             accessToken,
-            name,
+            name: name || url,
             tags,
             startDate: startDate ? new Date(startDate) : undefined,
             endDate: endDate ? new Date(endDate) : undefined
         });
         const savedStore = await this.storeRepository.save(store);
 
-        // Trigger initial sync asynchronously
-        this.syncStoreData(savedStore).catch(err =>
-            this.logger.error(`[${url}] Initial sync failed for store ${url}`, err.stack)
-        );
+        // Trigger initial sync asynchronously if token exists
+        if (savedStore.accessToken) {
+            this.syncStoreData(savedStore).catch(err =>
+                this.logger.error(`[${url}] Initial sync failed for store ${url}`, err.stack)
+            );
+        }
 
         return savedStore;
     }
@@ -118,6 +124,11 @@ export class StoreService {
     }
 
     async syncStoreData(store: Store) {
+        if (!store.accessToken) {
+            this.logger.warn(`[${store.url}] Skipping sync: No access token provided`);
+            return;
+        }
+
         this.logger.log(`[${store.url}] Syncing store: ${store.name}`);
 
         // Update status to SYNCING (keep previous lastSyncAt)

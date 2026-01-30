@@ -6,7 +6,7 @@ export class StoreController {
     constructor(private readonly storeService: StoreService) { }
 
     @Post()
-    create(@Body() body: { url: string; accessToken: string; name: string; tags?: string[]; startDate?: string; endDate?: string }) {
+    create(@Body() body: { url: string; accessToken?: string; name: string; tags?: string[]; startDate?: string; endDate?: string }) {
         return this.storeService.create(body.url, body.accessToken, body.name, body.tags, body.startDate, body.endDate);
     }
 

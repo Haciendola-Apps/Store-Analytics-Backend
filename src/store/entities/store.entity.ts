@@ -13,7 +13,7 @@ export class Store {
     @Column({ unique: true })
     url: string;
 
-    @Column()
+    @Column({ nullable: true })
     accessToken: string;
 
     @Column()
@@ -34,6 +34,15 @@ export class Store {
 
     @Column({ nullable: true })
     endDate: Date;
+
+    @Column({ nullable: true, default: null })
+    themeId: string;
+
+    @Column({ nullable: true, default: null })
+    themeName: string;
+
+    @Column({ nullable: true, default: null })
+    themeVersion: string;
 
     @CreateDateColumn()
     createdAt: Date;
