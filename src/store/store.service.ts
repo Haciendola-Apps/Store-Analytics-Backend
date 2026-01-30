@@ -120,27 +120,25 @@ export class StoreService {
     async syncStoreData(store: Store) {
         this.logger.log(`[${store.url}] Syncing store: ${store.name}`);
 
-        // Update status to SYNCING
-        await this.storeRepository.update(store.id, { syncStatus: 'SYNCING' });
+        // Update status to SYNCING (keep previous lastSyncAt)
+        await this.storeRepository.update(store.id, { 
+            syncStatus: 'SYNCING'
+        });
 
         try {
-            // 1. Determine Sync Range
+            // 1. Determine Sync Range (Hard vs Soft Sync)
             const today = new Date();
             const todayStr = today.toISOString().split('T')[0];
             let sinceStr = '';
 
-            // Check if we have data to determine Soft Vs Hard sync
-            const lastMetric = await this.storeRepository.manager.getRepository('DailyMetric').findOne({
-                where: { store: { id: store.id } },
-                order: { date: 'DESC' }
-            });
-
-            if (lastMetric && (lastMetric as any).date) {
-                // SOFT SYNC: Start from last metric date
-                sinceStr = (lastMetric as any).date;
-                this.logger.log(`[${store.url}] Soft Sync detected. Syncing from ${sinceStr} to ${todayStr}`);
+            // Use LastSyncAt as the reference for Soft vs Hard Sync
+            if (store.lastSyncAt) {
+                // SOFT SYNC: Start from the last successful sync date
+                sinceStr = new Date(store.lastSyncAt).toISOString().split('T')[0];
+                this.logger.log(`[${store.url}] Soft Sync detected. Last successful sync: ${sinceStr}. Syncing from ${sinceStr} to ${todayStr}`);
             } else {
                 // HARD SYNC: Reference Period Start - 3 Months
+                // Triggered if lastSyncAt is null/empty
                 let anchorDate = store.startDate ? new Date(store.startDate) : new Date();
 
                 // If anchor date is in future, use today
@@ -272,7 +270,9 @@ export class StoreService {
 
         } catch (error: any) {
             this.logger.error(`[${store.url}] Sync failed for store ${store.name}`, error.stack);
-            await this.storeRepository.update(store.id, { syncStatus: 'FAILED' });
+            await this.storeRepository.update(store.id, { 
+                syncStatus: 'FAILED'
+            });
             throw error;
         }
     }
