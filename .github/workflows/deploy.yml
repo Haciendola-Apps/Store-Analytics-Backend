@@ -1,0 +1,49 @@
+name: Reusable deploy job
+
+on:
+  workflow_call:
+    inputs:
+      env:
+        required: true
+        type: string
+      chart_version:
+        required: true
+        type: string
+      namespace:
+        required: true
+        type: string
+      image_tag:
+        required: true
+        type: string
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, '${{ inputs.env }}']
+    steps:
+      - name: Install AWS CLI
+        run: |
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+          unzip -q awscliv2.zip
+          sudo ./aws/install
+          aws --version
+
+      - name: Install Helm
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+      - name: Checkout store-analytics-backend's repository
+        uses: actions/checkout@v3
+
+      - name: Pull image from Amazon ECR and deploy in EKS
+        env:
+          ECR_REGISTRY: 458849787510.dkr.ecr.us-east-2.amazonaws.com
+          ECR_REPOSITORY: helm-store-analytics-backend
+          REGION: us-east-2
+        run: |
+          aws ecr get-login-password --region $REGION | helm registry login --username AWS --password-stdin $ECR_REGISTRY
+          helm pull oci://${ECR_REGISTRY}/${ECR_REPOSITORY} --version ${{ inputs.chart_version }}
+          helm upgrade store-analytics-backend oci://${ECR_REGISTRY}/${ECR_REPOSITORY} \
+            --version ${{ inputs.chart_version }} \
+            -f deploy/helm/values-${{ inputs.env }}.yaml \
+            --set global.image.tag=${{ inputs.image_tag }} \
+            -n ${{ inputs.namespace }}

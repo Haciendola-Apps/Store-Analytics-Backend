@@ -1,0 +1,178 @@
+global:
+  # enabled is the master enabled switch. Setting this to true or false
+  # will enable or disable all the components within this chart by default.
+  enabled: true
+
+  # Used to define custom fullname in template.
+  projectName: 'store-analytics-backend-dev'
+
+  # Image sets the repo,tag and pullPolicy of the project
+  image:
+    repository: '458849787510.dkr.ecr.us-east-2.amazonaws.com/store-analytics-backend'
+    tag: 'dev'
+    pullPolicy: 'Always'
+
+  # Cluster where release will be deployed
+  clusterName: 'haciendola-dev'
+
+  # Namespace where release will be deployed
+  namespace: 'hagamos-ecommerce-analytics-dev'
+
+  # Set to true to add DD's APM environment variables
+  datadogApm:
+    enabled: false
+
+  # Kubernetes External Secrets Operator
+  externalSecrets:
+    # Set to true to pull a secret from Vault and add it in the pods as env vars
+    vault:
+      enabled: false
+
+    # Set to true to pull a secret from Secrets Manager and add it in the pods as env vars
+    secretManager:
+      enabled: true
+      list:
+        - name: store-analytics-backend-dev
+          refreshInterval: 30s
+
+    # Set to true to pull a secret from Parameter Store and add it in the pods as env vars
+    parameterStore:
+      enabled: false
+
+chart-base:
+
+  deployment:
+    # True if you want to enable api deployment.
+    enabled: true
+
+    replicaCount: 1
+
+    containerName: 'store-analytics-backend'
+
+    command: ['npm']
+
+    commandArgs:
+      - run
+      - start:prod
+
+    securityContext:
+      runAsUser: 0
+
+    pdb:
+      enabled: false
+      minAvailable: 1
+
+    labels: {}
+
+    annotations:
+      reloader.stakater.com/auto: 'true'
+
+    envFrom:
+      - secretRef:
+          name: store-analytics-backend-dev-sm-secret
+
+    env: []
+
+    volumes: []
+
+    volumeMounts: []
+
+    serviceAccount:
+      name: ''
+      enabled: true
+      annotations: {}
+
+    # Set the nodeSelector lifecycle type to "normal" to use AWS "on demand" resources, by default the value "spot" is used.
+    nodeSelector: {}
+
+    tolerations:
+      - key: environment
+        operator: Equal
+        value: dev
+        effect: NoSchedule
+
+    podAntiAffinity: {}
+
+    nodeAffinity: {}
+
+    resources:
+      requests:
+        cpu: 300m
+        memory: 800Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+
+    terminationGracePeriodSeconds: 300
+    revisionHistoryLimit: 2
+
+    # extraEnvironmentVars is a list of extra enviroment variables to set with the stateful set.
+    extraEnvironmentVars: {}
+
+    livenessProbe:
+      enabled: false
+      path: /healthz
+      initialDelaySeconds: 15
+      periodSeconds: 20
+
+    readinessProbe:
+      enabled: false
+      path: /healthz
+      initialDelaySeconds: 15
+      periodSeconds: 20
+
+    autoscaling:
+      enabled: false
+      minReplicas: 2
+      maxReplicas: 4
+      targetCPUUtilizationPercentage: 80
+      targetMemoryUtilizationPercentage: 80
+
+    ## Allowing use of ingress controllers
+    ingress:
+      - labels: {}
+        # Adds a tag at end of the ingress name(Eg: if it's set to "public" the ingress name will be "<service>-public")
+        nameSuffix: 'alb'
+        annotations:
+          alb.ingress.kubernetes.io/group.name: 'dev-public'
+          alb.ingress.kubernetes.io/healthcheck-path: '/api/shops/getLoggedShop'
+          alb.ingress.kubernetes.io/success-codes: '401'
+          alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS":443}]'
+          alb.ingress.kubernetes.io/ssl-redirect: '443'
+          alb.ingress.kubernetes.io/scheme: 'public'
+          alb.ingress.kubernetes.io/target-type: 'ip'
+
+        hosts:
+          - host: store-analytics-back.dev.haciendola.dev
+            paths:
+              - /
+        ingressClassName: alb-public
+        pathType: Prefix
+
+    # Enables a headless service to be used by
+    service:
+      enabled: true
+      # Port on which API server is listening
+      port: 3000
+      # Target port to which the service should be mapped to
+      targetPort: 3000
+      # Extra annotations for the service definition. This should be a multi-line
+      # string formatted as a map of the annotations to apply to the service.
+      annotations: {}
+
+  ################################################ JOBS SECTION #################################################
+  
+  ################################################ CRONJOBS SECTION #############################################
+
+  # Cronjobs
+  cronjobs:
+    enabled: false
+  # Jobs
+  jobs:
+    enabled: false
+
+  ################################################ WORKERS SECTION #############################################
+
+  # Workers
+  workers:
+    enabled: false
