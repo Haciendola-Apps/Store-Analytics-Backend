@@ -222,6 +222,17 @@ export class AnalyticsService {
                 averageOrderValueChange: calculateChange(currentMetrics.aov, comparisonMetrics.aov),
                 totalSessionsChange: calculateChange(currentMetrics.sessions, comparisonMetrics.sessions),
                 conversionRateChange: calculateChange(currentMetrics.cr, comparisonMetrics.cr),
+                values: {
+                    totalRevenue: comparisonMetrics.revenue,
+                    totalOrders: comparisonMetrics.orders,
+                    averageOrderValue: comparisonMetrics.aov,
+                    totalSessions: comparisonMetrics.sessions,
+                    conversionRate: comparisonMetrics.cr
+                },
+                range: comparisonRange ? {
+                    start: comparisonRange.start.toISOString().split('T')[0],
+                    end: comparisonRange.end.toISOString().split('T')[0]
+                } : null
             } : null,
             benchmark: benchmarkMetrics ? {
                 totalRevenueChange: calculateChange(currentMetrics.revenue, benchmarkMetrics.revenue),
