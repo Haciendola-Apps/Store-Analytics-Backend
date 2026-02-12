@@ -1,13 +1,18 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import * as bcrypt from 'bcrypt';
+import { AnalyticsService } from '../analytics/analytics.service';
 
 @Injectable()
 export class SeedService implements OnModuleInit {
-    constructor(private readonly usersService: UsersService) { }
+    constructor(
+        private readonly usersService: UsersService,
+        private readonly analyticsService: AnalyticsService
+    ) { }
 
     async onModuleInit() {
         await this.seedAdminUser();
+        await this.analyticsService.seedSuccessConfigs();
     }
 
     async seedAdminUser() {

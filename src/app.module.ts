@@ -13,6 +13,7 @@ import { DailyMetric } from './analytics/entities/daily-metric.entity';
 import { SessionMetric } from './analytics/entities/session-metric.entity';
 import { ProductMetric } from './analytics/entities/product-metric.entity';
 import { LineItem } from './analytics/entities/line-item.entity';
+import { SuccessConfig } from './analytics/entities/success-config.entity';
 import { User } from './users/user.entity';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
@@ -28,7 +29,7 @@ import { SeedModule } from './seed/seed.module';
       username: process.env.DB_USER || 'postgres',
       password: process.env.DB_PASSWORD || 'postgres_password',
       database: process.env.DB_NAME || 'store_analytics',
-      entities: [Store, Order, Product, DailyMetric, SessionMetric, ProductMetric, LineItem, User],
+      entities: [Store, Order, Product, DailyMetric, SessionMetric, ProductMetric, LineItem, User, SuccessConfig],
       synchronize: true, // Auto-create tables (Dev only)
     }),
     StoreModule,

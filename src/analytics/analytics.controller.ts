@@ -5,6 +5,11 @@ import { AnalyticsService } from './analytics.service';
 export class AnalyticsController {
     constructor(private readonly analyticsService: AnalyticsService) { }
 
+    @Get('all/success-status')
+    async getAllSuccessStatuses() {
+        return this.analyticsService.getAllSuccessStatuses();
+    }
+
     @Get(':storeId')
     getAnalytics(
         @Param('storeId') storeId: string,
@@ -23,5 +28,9 @@ export class AnalyticsController {
         @Query('endDate') endDate?: string,
     ) {
         return this.analyticsService.getSessionMetrics(storeId, startDate, endDate);
+    }
+    @Get('success-status/:storeId')
+    async getSuccessStatus(@Param('storeId') storeId: string) {
+        return this.analyticsService.getSuccessStatus(storeId);
     }
 }

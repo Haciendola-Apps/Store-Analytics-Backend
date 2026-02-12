@@ -1,12 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, Not, IsNull } from 'typeorm';
 import { Order } from './entities/order.entity';
 import { Product } from './entities/product.entity';
 import { LineItem } from './entities/line-item.entity';
 import { DailyMetric } from './entities/daily-metric.entity';
 import { ProductMetric } from './entities/product-metric.entity';
 import { SessionMetric } from './entities/session-metric.entity';
+import { SuccessConfig } from './entities/success-config.entity';
 import { Store } from '../store/entities/store.entity';
 
 @Injectable()
@@ -22,6 +23,8 @@ export class AnalyticsService {
         private dailyMetricRepository: Repository<DailyMetric>,
         @InjectRepository(ProductMetric)
         private productMetricRepository: Repository<ProductMetric>,
+        @InjectRepository(SuccessConfig)
+        private successConfigRepository: Repository<SuccessConfig>,
         @InjectRepository(Store)
         private storeRepository: Repository<Store>,
     ) { }
@@ -272,5 +275,185 @@ export class AnalyticsService {
                 conversionRate: m.conversionRate ? parseFloat(m.conversionRate.toString()) : null
             }))
         };
+    }
+
+    async getSuccessStatus(storeId: string) {
+        const store = await this.storeRepository.findOne({ where: { id: storeId } });
+        if (!store || !store.startDate) {
+            return {
+                status: 'error',
+                message: 'Store or Start Date not found'
+            };
+        }
+
+        // Calculate Reference Period (from startDate to today or endDate)
+        const startDate = new Date(store.startDate);
+        const today = new Date();
+        const endDate = store.endDate && store.endDate < today ? new Date(store.endDate) : today;
+
+        const durationInMs = endDate.getTime() - startDate.getTime();
+        const durationInDays = Math.ceil(durationInMs / (1000 * 60 * 60 * 24));
+
+        // Prev Period is same duration before startDate
+        const prevStart = new Date(startDate);
+        prevStart.setDate(startDate.getDate() - durationInDays - 1);
+        const prevEnd = new Date(startDate);
+        prevEnd.setDate(startDate.getDate() - 1);
+
+        // Get Metrics for both periods
+        const getMetrics = async (s: Date, e: Date) => {
+            const result = await this.dailyMetricRepository
+                .createQueryBuilder('metric')
+                .select('SUM(metric.totalRevenue)', 'totalRevenue')
+                .where('metric.storeId = :storeId', { storeId })
+                .andWhere('metric.date BETWEEN :start AND :end', {
+                    start: s.toISOString().split('T')[0],
+                    end: e.toISOString().split('T')[0]
+                })
+                .getRawOne();
+
+            return parseFloat(result.totalRevenue || '0');
+        };
+
+        const currentRevenue = await getMetrics(startDate, endDate);
+        const previousRevenue = await getMetrics(prevStart, prevEnd);
+
+        const revenueIncrease = currentRevenue - previousRevenue;
+        const percentageIncrease = previousRevenue > 0 
+            ? (revenueIncrease / previousRevenue) * 100 
+            : (currentRevenue > 0 ? 100 : 0);
+
+        // Get Thresholds
+        const configs = await this.successConfigRepository.find({ where: { isActive: true } });
+        const fixedConfig = configs.find(c => c.type === 'fixed_amt');
+        const pctConfig = configs.find(c => c.type === 'pct_amt');
+
+        const calculateLevel = (value: number, config: SuccessConfig | undefined) => {
+            if (!config) return 'ninguno';
+            if (value >= config.highThreshold) return 'alto';
+            if (value >= config.mediumThreshold) return 'medio';
+            if (value >= config.lowThreshold) return 'leve';
+            if (value < 0) return 'negativo';
+            return 'ninguno';
+        };
+
+        return {
+            storeName: store.name,
+            durationInDays,
+            periods: {
+                reference: { start: startDate.toISOString().split('T')[0], end: endDate.toISOString().split('T')[0], revenue: currentRevenue },
+                previous: { start: prevStart.toISOString().split('T')[0], end: prevEnd.toISOString().split('T')[0], revenue: previousRevenue }
+            },
+            metrics: {
+                fixedIncrease: revenueIncrease,
+                percentageIncrease: percentageIncrease
+            },
+            successLevels: {
+                fixed: calculateLevel(revenueIncrease, fixedConfig),
+                percentage: calculateLevel(percentageIncrease, pctConfig)
+            },
+            thresholdsUsed: {
+                fixed: fixedConfig ? { low: fixedConfig.lowThreshold, medium: fixedConfig.mediumThreshold, high: fixedConfig.highThreshold } : null,
+                percentage: pctConfig ? { low: pctConfig.lowThreshold, medium: pctConfig.mediumThreshold, high: pctConfig.highThreshold } : null
+            }
+        };
+    }
+
+    async getAllSuccessStatuses() {
+        const stores = await this.storeRepository.find({
+            where: { startDate: Not(IsNull()) }
+        });
+
+        const configs = await this.successConfigRepository.find({ where: { isActive: true } });
+        const fixedConfig = configs.find(c => c.type === 'fixed_amt');
+        const pctConfig = configs.find(c => c.type === 'pct_amt');
+
+        const calculateLevel = (value: number, config: SuccessConfig | undefined) => {
+            if (!config) return 'ninguno';
+            if (value >= config.highThreshold) return 'alto';
+            if (value >= config.mediumThreshold) return 'medio';
+            if (value >= config.lowThreshold) return 'leve';
+            if (value < 0) return 'negativo';
+            return 'ninguno';
+        };
+
+        const results = [];
+
+        for (const store of stores) {
+            const startDate = new Date(store.startDate);
+            const today = new Date();
+            const endDate = store.endDate && store.endDate < today ? new Date(store.endDate) : today;
+
+            const durationInMs = endDate.getTime() - startDate.getTime();
+            const durationInDays = Math.ceil(durationInMs / (1000 * 60 * 60 * 24));
+
+            const prevStart = new Date(startDate);
+            prevStart.setDate(startDate.getDate() - durationInDays - 1);
+            const prevEnd = new Date(startDate);
+            prevEnd.setDate(startDate.getDate() - 1);
+
+            const metrics = await this.dailyMetricRepository
+                .createQueryBuilder('metric')
+                .select("SUM(CASE WHEN metric.date BETWEEN :start AND :end THEN metric.totalRevenue ELSE 0 END)", 'currentRevenue')
+                .addSelect("SUM(CASE WHEN metric.date BETWEEN :pStart AND :pEnd THEN metric.totalRevenue ELSE 0 END)", 'prevRevenue')
+                .where('metric.storeId = :storeId', { storeId: store.id })
+                .setParameters({
+                    start: startDate.toISOString().split('T')[0],
+                    end: endDate.toISOString().split('T')[0],
+                    pStart: prevStart.toISOString().split('T')[0],
+                    pEnd: prevEnd.toISOString().split('T')[0]
+                })
+                .getRawOne();
+
+            const currentRevenue = parseFloat(metrics.currentRevenue || '0');
+            const prevRevenue = parseFloat(metrics.prevRevenue || '0');
+
+            const revenueIncrease = currentRevenue - prevRevenue;
+            const percentageIncrease = prevRevenue > 0 
+                ? (revenueIncrease / prevRevenue) * 100 
+                : (currentRevenue > 0 ? 100 : 0);
+
+            results.push({
+                storeId: store.id,
+                fixedLevel: calculateLevel(revenueIncrease, fixedConfig),
+                percentageLevel: calculateLevel(percentageIncrease, pctConfig),
+                metrics: {
+                    fixedIncrease: revenueIncrease,
+                    percentageIncrease: percentageIncrease,
+                    currentRevenue,
+                    prevRevenue,
+                    durationInDays
+                }
+            });
+        }
+
+        return results;
+    }
+
+    async seedSuccessConfigs() {
+        const count = await this.successConfigRepository.count();
+        if (count === 0) {
+            console.log('Seeding default Success Configs...');
+            
+            const configs = [
+                {
+                    type: 'fixed_amt' as const,
+                    lowThreshold: 5000000,
+                    mediumThreshold: 10000000,
+                    highThreshold: 15000000,
+                    isActive: true
+                },
+                {
+                    type: 'pct_amt' as const,
+                    lowThreshold: 5,
+                    mediumThreshold: 10,
+                    highThreshold: 15,
+                    isActive: true
+                }
+            ];
+
+            await this.successConfigRepository.save(configs);
+            console.log('Success Configs seeded successfully.');
+        }
     }
 }
