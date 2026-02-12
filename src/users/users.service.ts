@@ -49,7 +49,7 @@ export class UsersService {
         const settings = await this.getSettings(userId);
         Object.assign(settings, update);
         const saved = await this.settingsRepository.save(settings);
-        console.log('Settings saved:', saved);
+        console.log(`Settings saved for user ${userId}:`, saved);
         return saved;
     }
 }
