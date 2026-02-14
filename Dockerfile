@@ -37,4 +37,4 @@ COPY --from=builder /app/dist ./dist
 EXPOSE 3000
 
 # Run in production mode
-CMD ["node", "dist/main"]
+CMD ["node", "dist/src/main.js"]
