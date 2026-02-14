@@ -40,3 +40,9 @@ Thumbs.db
 
 # NestJS
 .nest/
+
+
+#MD
+AWS_SETUP_GUIDE.md
+README.md
+USER_GUIDE.md
