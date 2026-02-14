@@ -1,0 +1,84 @@
+name: Store Analytics Pipeline
+
+on:
+  push:
+    branches:
+      - dev
+      - stg
+      - main
+
+jobs:
+  build-and-push:
+    runs-on: [self-hosted, mgt]
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Install AWS CLI
+        run: |
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+          unzip -q awscliv2.zip
+          sudo ./aws/install
+          aws --version
+
+      - name: Checkout store-analytics-backend's repository
+        uses: actions/checkout@v3
+
+      - name: Set environment variable
+        run: |
+          if [[ "${{ github.ref_name }}" == 'main' || "${{ github.ref_name }}" == 'master' ]]; then
+            echo "ENVIRONMENT=prd" >> $GITHUB_ENV
+          elif [[ "${{ github.ref_name }}" == 'dev' ]]; then
+            echo "ENVIRONMENT=dev" >> $GITHUB_ENV
+          elif [[ "${{ github.ref_name }}" == 'stg' ]]; then
+            echo "ENVIRONMENT=stg" >> $GITHUB_ENV
+          fi
+
+      - name: Build, tag, and push image to Amazon ECR
+        env:
+          ECR_REGISTRY: 458849787510.dkr.ecr.us-east-2.amazonaws.com
+          ECR_REPOSITORY: store-analytics-backend
+          REGION: us-east-2
+        run: |
+          aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
+          docker build -t ${ECR_REGISTRY}/${ECR_REPOSITORY}:${ENVIRONMENT} -t ${ECR_REGISTRY}/${ECR_REPOSITORY}:${ENVIRONMENT}_${{ github.run_id }} .
+          docker push --all-tags ${ECR_REGISTRY}/${ECR_REPOSITORY}
+
+  deploy_dev:
+    if: github.ref_name == 'dev'
+    needs: build-and-push
+    permissions:
+      id-token: write
+      contents: read
+    uses: ./.github/workflows/deploy.yml
+    with:
+      env: 'dev'
+      chart_version: '2.0.0'
+      namespace: 'hagamos-ecommerce-analytics-dev'
+      image_tag: dev_${{ github.run_id }}
+
+  deploy_stg:
+    if: github.ref_name == 'stg'
+    needs: build-and-push
+    permissions:
+      id-token: write
+      contents: read
+    uses: ./.github/workflows/deploy.yml
+    with:
+      env: 'stg'
+      chart_version: '2.0.0'
+      namespace: 'hagamos-ecommerce-analytics-stg'
+      image_tag: stg_${{ github.run_id }}
+
+  deploy_prd:
+    if: github.ref_name == 'main' || github.ref_name == 'master'
+    needs: build-and-push
+    permissions:
+      id-token: write
+      contents: read
+    uses: ./.github/workflows/deploy.yml
+    with:
+      env: 'prd'
+      chart_version: '2.0.0'
+      namespace: 'tarificador-ww-prd'
+      image_tag: prd_${{ github.run_id }}
