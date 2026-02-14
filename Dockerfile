@@ -1,24 +1,39 @@
-# Base image
-FROM node:20-alpine
+# ====================================
+# Stage 1: Build
+# ====================================
+FROM node:20-alpine AS builder
 
-# Set the working directory
 WORKDIR /app
 
-# Copy the files from the current directory
+# Copy package files
 COPY package*.json ./
 
-# Ignore developers and deprecated dependencies
-RUN npm ci --omit=dev --legacy-peer-deps
+# Install ALL dependencies (including devDependencies for build)
+RUN npm ci --legacy-peer-deps
 
-# Copy the rest of the application code
+# Copy source code
 COPY . .
 
-# Build image
+# Build the application (needs @nestjs/cli from devDependencies)
 RUN npm run build
 
-# User with permissions to edit files copied
-# Note: NestJS build usually outputs to dist/
-# We make sure node user can run it
+# ====================================
+# Stage 2: Production
+# ====================================
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install only production dependencies
+RUN npm ci --omit=dev --legacy-peer-deps
+
+# Copy built application from builder stage
+COPY --from=builder /app/dist ./dist
+
+# Use node user for security
 USER node
 
 # Run in production mode
