@@ -13,6 +13,9 @@ export class UserSetting {
     @Column({ default: 'CLP' })
     currency: string;
 
+    @Column({ default: 'en' })
+    language: string;
+
     @Column({ type: 'jsonb', default: {} })
     preferences: any; // For future settings like visible columns
 
