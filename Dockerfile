@@ -33,8 +33,8 @@ RUN npm ci --omit=dev --legacy-peer-deps
 # Copy built application from builder stage
 COPY --from=builder /app/dist ./dist
 
-# Use node user for security
-USER node
+# Expose port (documentation purposes)
+EXPOSE 3000
 
 # Run in production mode
-CMD ["npm", "run", "start:prod"]
+CMD ["node", "dist/main"]
