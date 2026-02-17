@@ -6,7 +6,6 @@ async function bootstrap() {
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule);
 
-  app.setGlobalPrefix('api');
   app.enableCors();
 
   const port = process.env.PORT || process.env.NODE_PORT || 3000;
